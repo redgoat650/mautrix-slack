@@ -32,6 +32,7 @@ import (
 	"maunium.net/go/mautrix/bridgev2"
 	"maunium.net/go/mautrix/bridgev2/networkid"
 	"maunium.net/go/mautrix/bridgev2/status"
+	"maunium.net/go/mautrix/event"
 
 	"go.mau.fi/mautrix-slack/pkg/msgconv"
 	"go.mau.fi/mautrix-slack/pkg/slackid"
@@ -63,17 +64,50 @@ func (s *SlackConnector) LoadUserLogin(ctx context.Context, login *bridgev2.User
 	teamID, userID := slackid.ParseUserLoginID(login.ID)
 	meta := login.Metadata.(*slackid.UserLoginMetadata)
 	var sc *SlackClient
+
 	if meta.Token == "" {
 		sc = &SlackClient{Main: s, UserLogin: login, UserID: userID, TeamID: teamID}
 	} else {
-		client := makeSlackClient(&login.Log, meta.Token, meta.CookieToken, meta.AppToken)
+		token := meta.Token
+		cookieToken := meta.CookieToken
+
+		if meta.Token == EphemeralTokenValueV0 {
+			var found bool
+			token, cookieToken, found = mt.Retrieve(login.ID)
+			if !found {
+				roomID, err := login.User.GetManagementRoom(ctx)
+				if err != nil {
+					return err
+				}
+
+				msgText := `The server has forgotten your login for <strong>` + string(login.ID) + `</strong>, as requested, probably because it needed to restart.
+<br/><br/>
+I, the bot, left you a &#9757 command above &#9757 to help you log back in to this workspace easily.
+<br/><br/>
+If you want to reconnect, please copy the command and paste it into the chat with me here.`
+
+				content := &event.MessageEventContent{
+					MsgType:       event.MsgText,
+					FormattedBody: msgText,
+					Format:        event.FormatHTML,
+				}
+
+				_, err = s.br.Bot.SendMessage(ctx, roomID, event.EventMessage, &event.Content{
+					Parsed: content}, nil)
+				if err != nil {
+					return err
+				}
+			}
+		}
+
+		client := makeSlackClient(&login.Log, token, cookieToken, meta.AppToken)
 		sc = &SlackClient{
 			Main:       s,
 			UserLogin:  login,
 			Client:     client,
 			UserID:     userID,
 			TeamID:     teamID,
-			IsRealUser: strings.HasPrefix(meta.Token, "xoxs-") || strings.HasPrefix(meta.Token, "xoxc-"),
+			IsRealUser: strings.HasPrefix(token, "xoxs-") || strings.HasPrefix(token, "xoxc-"),
 
 			chatInfoCache:          make(map[string]chatInfoCacheEntry),
 			chatInfoFetchAttempted: make(map[string]bool),

@@ -19,6 +19,7 @@ package connector
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -32,6 +33,7 @@ import (
 	"maunium.net/go/mautrix/bridge/status"
 	"maunium.net/go/mautrix/bridgev2"
 	"maunium.net/go/mautrix/bridgev2/networkid"
+	"maunium.net/go/mautrix/event"
 
 	"go.mau.fi/mautrix-slack/pkg/msgconv"
 	"go.mau.fi/mautrix-slack/pkg/slackid"
@@ -63,10 +65,31 @@ func (s *SlackConnector) LoadUserLogin(ctx context.Context, login *bridgev2.User
 	teamID, userID := slackid.ParseUserLoginID(login.ID)
 	meta := login.Metadata.(*slackid.UserLoginMetadata)
 	var sc *SlackClient
+
 	if meta.Token == "" {
 		sc = &SlackClient{Main: s, UserLogin: login, UserID: userID, TeamID: teamID}
 	} else {
-		client := makeSlackClient(&login.Log, meta.Token, meta.CookieToken, meta.AppToken)
+		token := meta.Token
+		cookieToken := meta.CookieToken
+
+		if meta.Token == EphemeralTokenValueV0 {
+			var found bool
+			token, cookieToken, found = mt.Retrieve(login.ID)
+			if !found {
+				roomID, err := login.User.GetManagementRoom(ctx)
+				if err != nil {
+					return err
+				}
+
+				s.br.Bot.SendMessage(ctx, roomID, event.EventMessage, &event.Content{
+					Parsed: `Hey, seems like the server done did a restart for some reason. Please copy the commands above into the chat with me here
+because I'm actually a real dumb bot, and I cannot remember your Slack tokens!`,
+				}, nil)
+				return errors.New("could not find cached user tokens")
+			}
+		}
+
+		client := makeSlackClient(&login.Log, token, cookieToken, meta.AppToken)
 		sc = &SlackClient{
 			Main:       s,
 			UserLogin:  login,

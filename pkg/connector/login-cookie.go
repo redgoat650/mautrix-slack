@@ -18,6 +18,7 @@ package connector
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"maunium.net/go/mautrix/bridgev2"
@@ -26,20 +27,32 @@ import (
 	"go.mau.fi/mautrix-slack/pkg/slackid"
 )
 
-const LoginFlowIDAuthToken = "token"
-const LoginStepIDAuthToken = "fi.mau.slack.login.enter_auth_token"
-const LoginStepIDComplete = "fi.mau.slack.login.complete"
+const (
+	EphemeralTokenValueV0         = "ephemeral"
+	LoginFlowIDAuthToken          = "token"
+	LoginFlowIDAuthTokenEphemeral = "token-forget"
+	LoginStepIDAuthToken          = "fi.mau.slack.login.enter_auth_token"
+	LoginStepIDComplete           = "fi.mau.slack.login.complete"
+)
 
 func (s *SlackConnector) GetLoginFlows() []bridgev2.LoginFlow {
-	return []bridgev2.LoginFlow{{
-		Name:        "Auth token & cookie",
-		Description: "Log in with an auth token (and a cookie, if the token is from a browser)",
-		ID:          LoginFlowIDAuthToken,
-	}, {
-		Name:        "Slack app",
-		Description: "Log in with a Slack app",
-		ID:          LoginFlowIDApp,
-	}}
+	return []bridgev2.LoginFlow{
+		{
+			Name:        "Auth token & cookie",
+			Description: "Log in with an auth token (and a cookie, if the token is from a browser)",
+			ID:          LoginFlowIDAuthToken,
+		},
+		{
+			Name:        "Slack app",
+			Description: "Log in with a Slack app",
+			ID:          LoginFlowIDApp,
+		},
+		{
+			Name:        "Auth token & cookie (non-persisted)",
+			Description: "Poopdick special option - we don't persist your token on the server.",
+			ID:          LoginFlowIDAuthTokenEphemeral,
+		},
+	}
 }
 
 func (s *SlackConnector) CreateLogin(ctx context.Context, user *bridgev2.User, flowID string) (bridgev2.LoginProcess, error) {
@@ -52,13 +65,19 @@ func (s *SlackConnector) CreateLogin(ctx context.Context, user *bridgev2.User, f
 		return &SlackAppLogin{
 			User: user,
 		}, nil
+	case LoginFlowIDAuthTokenEphemeral:
+		return &SlackTokenLogin{
+			User:      user,
+			Ephemeral: true,
+		}, nil
 	default:
 		return nil, fmt.Errorf("unknown login flow %s", flowID)
 	}
 }
 
 type SlackTokenLogin struct {
-	User *bridgev2.User
+	User      *bridgev2.User
+	Ephemeral bool
 }
 
 var _ bridgev2.LoginProcessCookies = (*SlackTokenLogin)(nil)
@@ -126,13 +145,36 @@ func (s *SlackTokenLogin) Cancel() {}
 
 func (s *SlackTokenLogin) SubmitCookies(ctx context.Context, input map[string]string) (*bridgev2.LoginStep, error) {
 	token, cookieToken := input["auth_token"], input["cookie_token"]
+
 	client := makeSlackClient(&s.User.Log, token, cookieToken, "")
 	info, err := client.ClientBootContext(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("client.boot failed: %w", err)
 	}
+
+	loginID := slackid.MakeUserLoginID(info.Team.ID, info.Self.ID)
+
+	successInstructions := fmt.Sprintf("Successfully logged into %s as %s", info.Team.Name, info.Self.Profile.Email)
+	if s.Ephemeral {
+		inputJSON, err := json.Marshal(input)
+		if err != nil {
+			return nil, err
+		}
+
+		mt.Register(loginID, token, cookieToken)
+		token = EphemeralTokenValueV0
+		cookieToken = ""
+		successInstructions = `You chose to log in with ephemeral key storage. The server can't remember your Slack access tokens (and neither can anyone else).
+When the server reboots (which happens from time to time), you'll need to log in again to keep syncing Slack messages to this server.
+
+When that happens, this server bot (me) should DM you, asking for your token info again. When that happens, simply send the following messages to me, one by one:
+
+1. login token
+2. ` + string(inputJSON)
+	}
+
 	ul, err := s.User.NewLogin(ctx, &database.UserLogin{
-		ID:         slackid.MakeUserLoginID(info.Team.ID, info.Self.ID),
+		ID:         loginID,
 		RemoteName: fmt.Sprintf("%s - %s", info.Team.Name, info.Self.Profile.Email),
 		Metadata: &slackid.UserLoginMetadata{
 			Email:       info.Self.Profile.Email,
@@ -154,7 +196,7 @@ func (s *SlackTokenLogin) SubmitCookies(ctx context.Context, input map[string]st
 	return &bridgev2.LoginStep{
 		Type:         bridgev2.LoginStepTypeComplete,
 		StepID:       LoginStepIDComplete,
-		Instructions: fmt.Sprintf("Successfully logged into %s as %s", info.Team.Name, info.Self.Profile.Email),
+		Instructions: successInstructions,
 		CompleteParams: &bridgev2.LoginCompleteParams{
 			UserLoginID: ul.ID,
 			UserLogin:   ul,

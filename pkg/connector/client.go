@@ -82,8 +82,10 @@ func (s *SlackConnector) LoadUserLogin(ctx context.Context, login *bridgev2.User
 				}
 
 				s.br.Bot.SendMessage(ctx, roomID, event.EventMessage, &event.Content{
-					Parsed: `Hey, seems like the server done did a restart for some reason. Please copy the commands above into the chat with me here
-because I'm actually a real dumb bot, and I cannot remember your Slack tokens!`,
+					Parsed: `Hey, seems like the server restarted for some reason.
+You elected to log in without persisting your access tokens for ` + fmt.Sprintf("%s on %s", userID, teamID) + `.
+I left you some commands above to help you log back in to this workspace a bit easier.
+Please copy those commands into the chat with me here; I'm actually a really dumb bot, and I can't see old messages.`,
 				}, nil)
 				return errors.New("could not find cached user tokens")
 			}

@@ -28,11 +28,11 @@ import (
 )
 
 const (
-	EphemeralTokenValueV0         = "ephemeral"
 	LoginFlowIDAuthToken          = "token"
 	LoginFlowIDAuthTokenEphemeral = "token-forget"
 	LoginStepIDAuthToken          = "fi.mau.slack.login.enter_auth_token"
 	LoginStepIDComplete           = "fi.mau.slack.login.complete"
+	EphemeralTokenValueV0         = "ephemeral"
 )
 
 func (s *SlackConnector) GetLoginFlows() []bridgev2.LoginFlow {
@@ -49,7 +49,7 @@ func (s *SlackConnector) GetLoginFlows() []bridgev2.LoginFlow {
 		},
 		{
 			Name:        "Auth token & cookie (non-persisted)",
-			Description: "Poopdick special option - we don't persist your token on the server.",
+			Description: `We won't store your login token on the server, but you'll need to login again on evey server reboot. This bot will notify you when it needs help loggnig in again.`,
 			ID:          LoginFlowIDAuthTokenEphemeral,
 		},
 	}
@@ -155,6 +155,7 @@ func (s *SlackTokenLogin) SubmitCookies(ctx context.Context, input map[string]st
 	loginID := slackid.MakeUserLoginID(info.Team.ID, info.Self.ID)
 
 	successInstructions := fmt.Sprintf("Successfully logged into %s as %s", info.Team.Name, info.Self.Profile.Email)
+
 	if s.Ephemeral {
 		inputJSON, err := json.Marshal(input)
 		if err != nil {
@@ -164,12 +165,15 @@ func (s *SlackTokenLogin) SubmitCookies(ctx context.Context, input map[string]st
 		mt.Register(loginID, token, cookieToken)
 		token = EphemeralTokenValueV0
 		cookieToken = ""
-		successInstructions = `You chose to log in with ephemeral key storage. The server can't remember your Slack access tokens (and neither can anyone else).
+		successInstructions += `.
+		
+You chose to log in with ephemeral key storage. The server can't remember your Slack access tokens (and neither can anyone else).
 When the server reboots (which happens from time to time), you'll need to log in again to keep syncing Slack messages to this server.
 
-When that happens, this server bot (me) should DM you, asking for your token info again. When that happens, simply send the following messages to me, one by one:
+When that happens, this server bot (me) should DM you, asking for your token info for ` +
+			info.Team.Name + ` again. When that happens, simply reply with the following messages to me, one by one:
 
-1. login token
+1. login ` + LoginFlowIDAuthTokenEphemeral + `
 2. ` + string(inputJSON)
 	}
 

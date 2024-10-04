@@ -169,7 +169,7 @@ func (s *SlackTokenLogin) SubmitCookies(ctx context.Context, input map[string]st
 If the server happens to reboot for whatever reason, you'll need to log in again to keep syncing Slack messages to your space.
 <br/><br/>
 
-When that happens, I, the bot, will DM you, asking for your token info for ` + info.Team.Name +
+When that happens, I, the bot, will message you here, asking for your token info for ` + info.Team.Name +
 			` again.
 <br/><br/>
 Simply copy the following text into a message with me:

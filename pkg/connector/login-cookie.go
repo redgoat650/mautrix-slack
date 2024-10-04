@@ -154,8 +154,6 @@ func (s *SlackTokenLogin) SubmitCookies(ctx context.Context, input map[string]st
 
 	loginID := slackid.MakeUserLoginID(info.Team.ID, info.Self.ID)
 
-	successInstructions := fmt.Sprintf("Successfully logged into %s as %s", info.Team.Name, info.Self.Profile.Email)
-
 	if s.Ephemeral {
 		mt.Register(loginID, token, cookieToken)
 
@@ -221,7 +219,7 @@ Simply copy the following text into a message with me:
 	return &bridgev2.LoginStep{
 		Type:         bridgev2.LoginStepTypeComplete,
 		StepID:       LoginStepIDComplete,
-		Instructions: successInstructions,
+		Instructions: fmt.Sprintf("Successfully logged into %s as %s", info.Team.Name, info.Self.Profile.Email),
 		CompleteParams: &bridgev2.LoginCompleteParams{
 			UserLoginID: ul.ID,
 			UserLogin:   ul,

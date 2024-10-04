@@ -82,9 +82,9 @@ func (s *SlackConnector) LoadUserLogin(ctx context.Context, login *bridgev2.User
 
 				msgText := `The server has forgotten your login for <strong>` + string(login.ID) + `</strong>, as requested, probably because it needed to restart.
 <br/><br/>
-I, the bot, left you a &#9757 command above &#9757 to help you log back in to this workspace a bit easier.
+I, the bot, left you a &#9757 command above &#9757 to help you log back in to this workspace easily.
 <br/><br/>
-If you want to reconnect to that Slack workspace, please copy the command and paste it into the chat with me here.`
+If you want to reconnect, please copy the command and paste it into the chat with me here.`
 
 				content := &event.MessageEventContent{
 					MsgType:       event.MsgText,

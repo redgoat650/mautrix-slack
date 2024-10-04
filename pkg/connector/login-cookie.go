@@ -18,11 +18,11 @@ package connector
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"maunium.net/go/mautrix/bridgev2"
 	"maunium.net/go/mautrix/bridgev2/database"
+	"maunium.net/go/mautrix/event"
 
 	"go.mau.fi/mautrix-slack/pkg/slackid"
 )
@@ -157,24 +157,45 @@ func (s *SlackTokenLogin) SubmitCookies(ctx context.Context, input map[string]st
 	successInstructions := fmt.Sprintf("Successfully logged into %s as %s", info.Team.Name, info.Self.Profile.Email)
 
 	if s.Ephemeral {
-		inputJSON, err := json.Marshal(input)
+		mt.Register(loginID, token, cookieToken)
+
+		token = EphemeralTokenValueV0
+		cookieToken = ""
+
+		roomID, err := s.User.GetManagementRoom(ctx)
 		if err != nil {
 			return nil, err
 		}
 
-		mt.Register(loginID, token, cookieToken)
-		token = EphemeralTokenValueV0
-		cookieToken = ""
-		successInstructions += `.
-		
-You chose to log in with ephemeral key storage. The server can't remember your Slack access tokens (and neither can anyone else).
-When the server reboots (which happens from time to time), you'll need to log in again to keep syncing Slack messages to this server.
+		instructions := `You chose to log in with ephemeral key storage. The server can't remember your Slack access tokens (so no one else can either).
+If the server happens to reboot for whatever reason, you'll need to log in again to keep syncing Slack messages to your space.
+<br/><br/>
 
-When that happens, this server bot (me) should DM you, asking for your token info for ` +
-			info.Team.Name + ` again. When that happens, simply reply with the following messages to me, one by one:
+When that happens, I, the bot, will DM you, asking for your token info for ` + info.Team.Name +
+			` again.
+<br/><br/>
+Simply copy the following text into a message with me:
+<br/><br/>
 
-1. login ` + LoginFlowIDAuthTokenEphemeral + `
-2. ` + string(inputJSON)
+<details>
+<summary><strong>Click here to reveal the ` + fmt.Sprintf("%s (%s)", info.Team.Name, loginID) + ` Slack reconnect message</strong> &#128072</summary>
+
+<pre><code>` +
+			fmt.Sprintf("login token-forget %s %s", input["auth_token"], input["cookie_token"]) +
+			`</code></pre>
+<br/><br/></details>`
+
+		content := event.MessageEventContent{
+			MsgType:       event.MsgText,
+			Format:        event.FormatHTML,
+			FormattedBody: instructions,
+		}
+		_, err = s.User.Bridge.Bot.SendMessage(ctx, roomID, event.EventMessage, &event.Content{
+			Parsed: content,
+		}, nil)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	ul, err := s.User.NewLogin(ctx, &database.UserLogin{

@@ -19,7 +19,6 @@ package connector
 import (
 	"cmp"
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -81,13 +80,23 @@ func (s *SlackConnector) LoadUserLogin(ctx context.Context, login *bridgev2.User
 					return err
 				}
 
-				s.br.Bot.SendMessage(ctx, roomID, event.EventMessage, &event.Content{
-					Parsed: `Hey, seems like the server restarted for some reason.
-You elected to log in without persisting your access tokens for ` + fmt.Sprintf("%s on %s", userID, teamID) + `.
-I left you some commands above to help you log back in to this workspace a bit easier.
-Please copy those commands into the chat with me here; I'm actually a really dumb bot, and I can't see old messages.`,
-				}, nil)
-				return errors.New("could not find cached user tokens")
+				msgText := `The server has forgotten your login for <strong>` + string(login.ID) + `</strong>, as requested, probably because it needed to restart.
+<br/><br/>
+I, the bot, left you a &#9757 command above &#9757 to help you log back in to this workspace a bit easier.
+<br/><br/>
+If you want to reconnect to that Slack workspace, please copy the command and paste it into the chat with me here.`
+
+				content := &event.MessageEventContent{
+					MsgType:       event.MsgText,
+					FormattedBody: msgText,
+					Format:        event.FormatHTML,
+				}
+
+				_, err = s.br.Bot.SendMessage(ctx, roomID, event.EventMessage, &event.Content{
+					Parsed: content}, nil)
+				if err != nil {
+					return err
+				}
 			}
 		}
 
@@ -98,7 +107,7 @@ Please copy those commands into the chat with me here; I'm actually a really dum
 			Client:     client,
 			UserID:     userID,
 			TeamID:     teamID,
-			IsRealUser: strings.HasPrefix(meta.Token, "xoxs-") || strings.HasPrefix(meta.Token, "xoxc-"),
+			IsRealUser: strings.HasPrefix(token, "xoxs-") || strings.HasPrefix(token, "xoxc-"),
 
 			chatInfoCache:   make(map[string]chatInfoCacheEntry),
 			lastReadCache:   make(map[string]string),

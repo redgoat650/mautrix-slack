@@ -1,16 +1,12 @@
 #!/bin/sh
 
-if [[ -z "$GID" ]]; then
+if [ -z "$GID" ]; then
 	GID="$UID"
 fi
 
 BINARY_NAME=/usr/bin/mautrix-slack
 
-function fixperms {
-	chown -R $UID:$GID /data
-}
-
-if [[ ! -f /data/config.yaml ]]; then
+if [ ! -f /data/config.yaml ]; then
 	$BINARY_NAME -c /data/config.yaml -e
 	echo "Didn't find a config file."
 	echo "Copied default config file to /data/config.yaml"
@@ -19,7 +15,7 @@ if [[ ! -f /data/config.yaml ]]; then
 	exit
 fi
 
-if [[ ! -f /data/registration.yaml ]]; then
+if [ ! -f /data/registration.yaml ]; then
 	$BINARY_NAME -g -c /data/config.yaml -r /data/registration.yaml
 	echo "Didn't find a registration file."
 	echo "Generated one for you."
@@ -28,5 +24,5 @@ if [[ ! -f /data/registration.yaml ]]; then
 fi
 
 cd /data
-fixperms
-exec su-exec $UID:$GID $BINARY_NAME
+chown -R $UID:$GID /data
+exec $BINARY_NAME

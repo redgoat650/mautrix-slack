@@ -1,9 +1,14 @@
-FROM alpine:3.20
+FROM ubuntu
 
 ENV UID=1337 \
     GID=1337
 
-RUN apk add --no-cache ffmpeg su-exec ca-certificates bash jq curl yq-go
+# RUN apk add --no-cache ffmpeg su-exec ca-certificates bash jq curl yq-go
+RUN apt-get update && \
+    apt-get install -y bash && \
+    apt-get install -y jq && \
+    apt-get install -y ca-certificates && \
+    apt-get install -y libolm-dev
 
 ARG EXECUTABLE=./mautrix-slack
 COPY $EXECUTABLE /usr/bin/mautrix-slack

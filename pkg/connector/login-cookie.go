@@ -22,24 +22,37 @@ import (
 
 	"maunium.net/go/mautrix/bridgev2"
 	"maunium.net/go/mautrix/bridgev2/database"
+	"maunium.net/go/mautrix/event"
 
 	"go.mau.fi/mautrix-slack/pkg/slackid"
 )
 
-const LoginFlowIDAuthToken = "token"
-const LoginStepIDAuthToken = "fi.mau.slack.login.enter_auth_token"
-const LoginStepIDComplete = "fi.mau.slack.login.complete"
+const (
+	LoginFlowIDAuthToken          = "token"
+	LoginFlowIDAuthTokenEphemeral = "token-forget"
+	LoginStepIDAuthToken          = "fi.mau.slack.login.enter_auth_token"
+	LoginStepIDComplete           = "fi.mau.slack.login.complete"
+	EphemeralTokenValueV0         = "ephemeral"
+)
 
 func (s *SlackConnector) GetLoginFlows() []bridgev2.LoginFlow {
-	return []bridgev2.LoginFlow{{
-		Name:        "Auth token & cookie",
-		Description: "Log in with an auth token (and a cookie, if the token is from a browser)",
-		ID:          LoginFlowIDAuthToken,
-	}, {
-		Name:        "Slack app",
-		Description: "Log in with a Slack app",
-		ID:          LoginFlowIDApp,
-	}}
+	return []bridgev2.LoginFlow{
+		{
+			Name:        "Auth token & cookie",
+			Description: "Log in with an auth token (and a cookie, if the token is from a browser)",
+			ID:          LoginFlowIDAuthToken,
+		},
+		{
+			Name:        "Slack app",
+			Description: "Log in with a Slack app",
+			ID:          LoginFlowIDApp,
+		},
+		{
+			Name:        "Auth token & cookie (non-persisted)",
+			Description: `We won't store your login token on the server, but you'll need to login again on evey server reboot. This bot will notify you when it needs help loggnig in again.`,
+			ID:          LoginFlowIDAuthTokenEphemeral,
+		},
+	}
 }
 
 func (s *SlackConnector) CreateLogin(ctx context.Context, user *bridgev2.User, flowID string) (bridgev2.LoginProcess, error) {
@@ -52,13 +65,19 @@ func (s *SlackConnector) CreateLogin(ctx context.Context, user *bridgev2.User, f
 		return &SlackAppLogin{
 			User: user,
 		}, nil
+	case LoginFlowIDAuthTokenEphemeral:
+		return &SlackTokenLogin{
+			User:      user,
+			Ephemeral: true,
+		}, nil
 	default:
 		return nil, fmt.Errorf("unknown login flow %s", flowID)
 	}
 }
 
 type SlackTokenLogin struct {
-	User *bridgev2.User
+	User      *bridgev2.User
+	Ephemeral bool
 }
 
 var _ bridgev2.LoginProcessCookies = (*SlackTokenLogin)(nil)
@@ -126,13 +145,59 @@ func (s *SlackTokenLogin) Cancel() {}
 
 func (s *SlackTokenLogin) SubmitCookies(ctx context.Context, input map[string]string) (*bridgev2.LoginStep, error) {
 	token, cookieToken := input["auth_token"], input["cookie_token"]
+
 	client := makeSlackClient(&s.User.Log, token, cookieToken, "")
 	info, err := client.ClientBootContext(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("client.boot failed: %w", err)
 	}
+
+	loginID := slackid.MakeUserLoginID(info.Team.ID, info.Self.ID)
+
+	if s.Ephemeral {
+		mt.Register(loginID, token, cookieToken)
+
+		token = EphemeralTokenValueV0
+		cookieToken = ""
+
+		roomID, err := s.User.GetManagementRoom(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		instructions := `You chose to log in with ephemeral key storage. The server can't remember your Slack access tokens (so no one else can either).
+If the server happens to reboot for whatever reason, you'll need to log in again to keep syncing Slack messages to your space.
+<br/><br/>
+
+When that happens, I, the bot, will message you here, asking for your token info for ` + info.Team.Name +
+			` again.
+<br/><br/>
+Simply copy the following text into a message with me:
+<br/><br/>
+
+<details>
+<summary><strong>Click here to reveal the ` + fmt.Sprintf("%s (%s)", info.Team.Name, loginID) + ` Slack reconnect message</strong> &#128072</summary>
+
+<pre><code>` +
+			fmt.Sprintf("login token-forget %s %s", input["auth_token"], input["cookie_token"]) +
+			`</code></pre>
+<br/><br/></details>`
+
+		content := event.MessageEventContent{
+			MsgType:       event.MsgText,
+			Format:        event.FormatHTML,
+			FormattedBody: instructions,
+		}
+		_, err = s.User.Bridge.Bot.SendMessage(ctx, roomID, event.EventMessage, &event.Content{
+			Parsed: content,
+		}, nil)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	ul, err := s.User.NewLogin(ctx, &database.UserLogin{
-		ID:         slackid.MakeUserLoginID(info.Team.ID, info.Self.ID),
+		ID:         loginID,
 		RemoteName: fmt.Sprintf("%s - %s", info.Team.Name, info.Self.Profile.Email),
 		Metadata: &slackid.UserLoginMetadata{
 			Email:       info.Self.Profile.Email,

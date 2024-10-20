@@ -97,6 +97,8 @@ If you want to reconnect, please copy the command and paste it into the chat wit
 				if err != nil {
 					return err
 				}
+
+				login.KickUserFromPortalsForBadCredentials(ctx)
 			}
 		}
 

@@ -98,8 +98,6 @@ If you want to reconnect, please copy the command and paste it into the chat wit
 					return err
 				}
 
-				login.KickUserFromPortalsForBadCredentials(ctx)
-
 				msgText = `another message`
 
 				content = &event.MessageEventContent{

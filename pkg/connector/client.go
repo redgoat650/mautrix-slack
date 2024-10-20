@@ -84,7 +84,7 @@ func (s *SlackConnector) LoadUserLogin(ctx context.Context, login *bridgev2.User
 <br/><br/>
 I, the bot, left you a &#9757 command above &#9757 to help you log back in to this workspace easily.
 <br/><br/>
-If you want to reconnect, please copy the command and paste it into the chat with me here.`
+If you want to reconnect, please copy the command and paste it into the chat with me here. asdfasdfasdfa`
 
 				content := &event.MessageEventContent{
 					MsgType:       event.MsgText,
@@ -99,6 +99,20 @@ If you want to reconnect, please copy the command and paste it into the chat wit
 				}
 
 				login.KickUserFromPortalsForBadCredentials(ctx)
+
+				msgText = `another message`
+
+				content = &event.MessageEventContent{
+					MsgType:       event.MsgText,
+					FormattedBody: msgText,
+					Format:        event.FormatHTML,
+				}
+
+				_, err = s.br.Bot.SendMessage(ctx, roomID, event.EventMessage, &event.Content{
+					Parsed: content}, nil)
+				if err != nil {
+					return err
+				}
 			}
 		}
 

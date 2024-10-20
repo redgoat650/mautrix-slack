@@ -92,8 +92,6 @@ If you want to reconnect, please copy the command and paste it into the chat wit
 					Format:        event.FormatHTML,
 				}
 
-				panic("Here")
-
 				_, err = s.br.Bot.SendMessage(ctx, roomID, event.EventMessage, &event.Content{
 					Parsed: content}, nil)
 				if err != nil {

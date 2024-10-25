@@ -494,7 +494,7 @@ func (s *SlackClient) SyncChannels(ctx context.Context) {
 			SlackEventMeta: &SlackEventMeta{
 				Type:         bridgev2.RemoteEventChatResync,
 				PortalKey:    portalKey,
-				CreatePortal: hasCounts || (!ch.IsIM && !ch.IsMpIM),
+				CreatePortal: true,
 				LogContext: func(c zerolog.Context) zerolog.Context {
 					return c.
 						Object("portal_key", portalKey).

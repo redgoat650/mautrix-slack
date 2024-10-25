@@ -56,7 +56,7 @@ func (s *SlackClient) FetchMessages(ctx context.Context, params bridgev2.FetchMe
 	}
 	_, channelID := slackid.ParsePortalID(params.Portal.ID)
 	if channelID == "" {
-		return nil, fmt.Errorf("invalid channel ID: %s", channelID)
+		return nil, fmt.Errorf("invalid channel ID")
 	}
 	var anchorMessageID string
 	if params.AnchorMessage != nil {
